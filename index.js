@@ -1,40 +1,50 @@
-const express = require('express');
-const app = express();
-const cors = require('cors');
-const morgan = require('morgan');
-const PORT = process.env.PORT || 4000;
-const baseURL = '/api/'
-const mainRouter = require('./routes/mainRoute')
+const fetch = require('node-fetch');
+const xml2js = require('xml2js')
+const parser = new xml2js.Parser()
+const fs = require('fs')
 
-//middlewares
-app.use(cors());
-app.use(express.json());
-morgan.token('test', (req) => JSON.stringify(req.body));
-app.use(
-  morgan(
-    ':method :url :status -- :test -- :res[content-length] - :response-time ms '
-  )
-);
-app.use(baseURL, mainRouter)
+async function firstRun() {
+  let fxLinks = []
+  const xmlLinks = await takeFirstXMLLink('https://fxdigital.wearefx.uk/sitemap_index.xml')
 
-// error handling
-app.use('/', (req, res, next) => {
-  const err = new Error('page does not exist');
-  err.status = 404;
-  next(err);
-});
+  for (let i = 0; i < xmlLinks.length; i++) {
+    const fxs = await takeSecondXMLLink(xmlLinks[i])
+    fxs.forEach((v) => {
+      fxLinks.push(v)
+    })
+  }
 
-app.use((err, req, res, next) => {
-  res.status(err.status || 500).json({
-    error: {
-      status: err.status || 500,
-      message: err.message,
-    },
-  });
-});
+}
 
-app.listen(PORT, () => {
-  console.log(`server is running - ${PORT}`);
-});
+firstRun()
+
+
+async function takeFirstXMLLink(link) {
+  const raw = await fetch(link)
+  const xml = await raw.text()
+  let linksArr
+  parser.parseString((xml), (err, result) => {
+    const { sitemapindex: { sitemap } } = result
+    const links = sitemap.map((v) => {
+      return v.loc[0]
+    })
+    linksArr = links
+  })
+  return linksArr
+}
+
+async function takeSecondXMLLink(link) {
+  const raw = await fetch(link)
+  const xml = await raw.text()
+  let linksArr
+  parser.parseString((xml), (err, result) => {
+    const urls = result.urlset.url
+    const links = urls.map((v) => {
+      return v.loc[0]
+    })
+    linksArr = links
+  })
+  return linksArr
+}
 
 
